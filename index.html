@@ -241,6 +241,42 @@ html,body {
 .feedback.miss { background: rgba(232,85,74,.1); border: 1px solid rgba(232,85,74,.25); color: #e8554a; }
 .feedback.pr   { background: rgba(240,180,41,.1); border: 1px solid rgba(240,180,41,.3); color: var(--yellow); }
 
+/* ── QUEUE ── */
+.queue-list { margin: 14px 0 0; display: flex; flex-direction: column; gap: 8px; }
+.queue-item {
+  background: var(--card2); border: 1px solid var(--border);
+  border-radius: 12px; padding: 12px 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.queue-item-info { display: flex; flex-direction: column; gap: 3px; }
+.queue-item-lift { font-size: .72rem; font-weight: 700; color: var(--muted2); text-transform: uppercase; letter-spacing: .8px; }
+.queue-item-set  { font-size: 1rem; font-weight: 800; color: #fff; letter-spacing: -.3px; }
+.queue-item-note { font-size: .7rem; color: var(--muted); font-style: italic; }
+.queue-remove {
+  background: none; border: 1px solid var(--border); color: var(--muted2);
+  border-radius: 8px; padding: 6px 10px; font-size: .8rem; cursor: pointer;
+  font-family: inherit; -webkit-appearance: none; flex-shrink: 0;
+}
+.add-set-btn {
+  width: 100%; background: var(--card2); border: 1px solid var(--teal); color: var(--teal);
+  border-radius: 16px; padding: 16px; font-size: 1rem; font-weight: 800;
+  cursor: pointer; font-family: inherit; -webkit-appearance: none;
+  margin-top: 6px; letter-spacing: .2px;
+}
+.add-set-btn:active { opacity: .85; }
+.submit-all-btn {
+  width: 100%; background: var(--teal); color: #000; border: none;
+  border-radius: 16px; padding: 18px; font-size: 1rem; font-weight: 800;
+  cursor: pointer; font-family: inherit; -webkit-appearance: none;
+  margin-top: 8px; letter-spacing: .2px;
+}
+.submit-all-btn:active { opacity: .85; }
+.queue-header {
+  font-size: .62rem; font-weight: 700; color: var(--muted2);
+  text-transform: uppercase; letter-spacing: 1.2px; margin-top: 20px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
 /* ── PROGRESS PAGE ── */
 .chips {
   display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none;
@@ -353,7 +389,8 @@ html,body {
 
 <!-- LOG -->
 <div class="pg" id="pg-log">
-  <div class="pg-title">Log a Set</div>
+  <div class="pg-title">Log Session</div>
+  <div class="field"><label>Date</label><input type="date" id="fDate"></div>
   <div class="field">
     <label>Lift</label>
     <select id="fLift" onchange="liftChanged()">
@@ -372,9 +409,13 @@ html,body {
       <div class="qreps" id="qreps"></div>
     </div>
   </div>
-  <div class="field"><label>Date</label><input type="date" id="fDate"></div>
   <div class="field"><label>Notes (optional)</label><input type="text" id="fNotes" placeholder="felt strong, shoulder tight…" maxlength="80"></div>
-  <button class="big-btn" onclick="logIt()">Log It →</button>
+  <button class="add-set-btn" onclick="addSet()">+ Add Set</button>
+  <div id="queueArea" style="display:none">
+    <div class="queue-header"><span id="queueCount">0 sets queued</span><button onclick="clearQueue()" style="background:none;border:none;color:var(--muted);font-size:.72rem;cursor:pointer;font-family:inherit;">Clear all</button></div>
+    <div class="queue-list" id="queueList"></div>
+    <button class="submit-all-btn" onclick="submitAll()">Submit All →</button>
+  </div>
   <div class="feedback" id="feedback"></div>
 </div>
 
@@ -511,6 +552,7 @@ let bwLog = ls('gym_bw', {});
 let mode  = ls('gym_mode', 'bulk');
 let activeLift = 'Bench Press';
 let chart = null, modLift = null, prefill = null;
+let queue = []; // pending sets for multi-set logging
 
 function ls(k,d){ try{const v=localStorage.getItem(k);return v?JSON.parse(v):JSON.parse(JSON.stringify(d));}catch(e){return JSON.parse(JSON.stringify(d));} }
 function lss(k,v){ try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
@@ -521,7 +563,7 @@ function fbSave(){
   dbRef.set({ gym_d:data, gym_bl:bl, gym_bw:bwLog, gym_mode:mode }).catch(()=>{});
 }
 
-// ── AUTH ──────────────────────────────────────────────
+// ── AUTH ─────────────────────────────────────────────
 function signIn(){
   if(!configReady){
     document.getElementById('signinStatus').textContent='Open the HTML file and paste your Firebase config at the top of the script.';
@@ -573,7 +615,7 @@ if(configReady){
   initMode(); renderToday();
 }
 
-// ── HELPERS ───────────────────────────────────────────
+// ── HELPERS ──────────────────────────────────────────
 const sort  = a=>[...a].sort((x,y)=>x.date.localeCompare(y.date));
 const today = ()=>new Date().toISOString().split('T')[0];
 const isBW  = l=>BW_LIFTS.includes(l);
@@ -603,7 +645,7 @@ function target(l){
 }
 function loggedToday(l){ const e=last(l); return e&&e.date===today(); }
 
-// ── NAV ───────────────────────────────────────────────
+// ── NAV ──────────────────────────────────────────────
 function goPage(name,liftName){
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   document.querySelectorAll('.ntab').forEach(b=>b.classList.remove('on'));
@@ -615,7 +657,7 @@ function goPage(name,liftName){
   if(name==='progress') renderProgress();
 }
 
-// ── MODE ──────────────────────────────────────────────
+// ── MODE ─────────────────────────────────────────────
 function setMode(m){
   mode=m; lss('gym_mode',m); fbSave();
   document.getElementById('bBulk').className=m==='bulk'?'on-bulk':'';
@@ -628,7 +670,7 @@ function initMode(){
   document.getElementById('bCut').className=mode==='cut'?'on-cut':'';
 }
 
-// ── TODAY ─────────────────────────────────────────────
+// ── TODAY ────────────────────────────────────────────
 function renderToday(){
   document.getElementById('topDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
   renderBW(); renderDay();
@@ -690,10 +732,13 @@ function renderDay(){
   }).join('');
 }
 
-// ── LOG ───────────────────────────────────────────────
+// ── LOG ──────────────────────────────────────────────
 function renderLog(){
   document.getElementById('fDate').value=today();
   document.getElementById('feedback').style.display='none';
+  document.getElementById('queueArea').style.display='none';
+  document.getElementById('queueList').innerHTML='';
+  queue=[];
   if(prefill){document.getElementById('fLift').value=prefill;prefill=null;}
   liftChanged();
 }
@@ -714,30 +759,65 @@ function liftChanged(){
   ).join('');
 }
 
-function logIt(){
+function addSet(){
   const l=document.getElementById('fLift').value,date=document.getElementById('fDate').value;
   const w=(l==='Leg Raises'||l==='45 Degree Sit-Ups')?0:(parseFloat(document.getElementById('fW').value)||0);
   const r=parseInt(document.getElementById('fR').value),n=document.getElementById('fNotes').value.trim();
   if(!l){alert('Pick a lift');return;} if(!date){alert('Set a date');return;} if(isNaN(r)||r<1){alert('Enter reps');return;}
-  const t=target(l);
-  if(!data[l])data[l]=[];
-  data[l].push({date,w,r,n}); data[l].sort((a,b)=>a.date.localeCompare(b.date));
-  lss('gym_d',data); fbSave();
-  const nt=target(l),earned=!t.bump&&nt.bump&&mode!=='cut';
-  const fb=document.getElementById('feedback');
-  if(r>=t.r){
-    if(earned){fb.className='feedback pr';fb.innerHTML=`🔥 Weight bump earned! Hit ${r} reps. Next: ${fmtW(l,nt.w)}lb × ${nt.r} reps.`;}
-    else if(t.bump){fb.className='feedback ok';fb.innerHTML=`💪 Weight bump session done. Now build back to ${MAX} reps at this weight.`;}
-    else{fb.className='feedback ok';fb.innerHTML=`✓ Nailed it. Next: ${fmtW(l,nt.w)}lb × ${nt.r} reps.`;}
-  } else {
-    fb.className='feedback miss';fb.innerHTML=`${r} reps (target: ${t.r}). Keep pushing — next target: ${fmtW(l,nt.w)}lb × ${nt.r}.`;
-  }
-  fb.style.display='block';
+  queue.push({l,date,w,r,n});
   document.getElementById('fR').value=''; document.getElementById('fNotes').value='';
+  renderQueue();
   liftChanged();
 }
 
-// ── PROGRESS ──────────────────────────────────────────
+function renderQueue(){
+  const area=document.getElementById('queueArea');
+  const list=document.getElementById('queueList');
+  const cnt=document.getElementById('queueCount');
+  if(!queue.length){area.style.display='none';return;}
+  area.style.display='block';
+  cnt.textContent=queue.length+' set'+(queue.length>1?'s':'')+' queued';
+  list.innerHTML=queue.map((s,i)=>{
+    const wLabel=s.l==='Leg Raises'||s.l==='45 Degree Sit-Ups'?'BW':s.l==='Pull-Ups'?s.w===0?'BW':`+${s.w}lb`:`${s.w}lb`;
+    return`<div class="queue-item">
+      <div class="queue-item-info">
+        <div class="queue-item-lift">${s.l}</div>
+        <div class="queue-item-set">${wLabel} × ${s.r} reps</div>
+        ${s.n?`<div class="queue-item-note">${s.n}</div>`:''}
+      </div>
+      <button class="queue-remove" onclick="removeSet(${i})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function removeSet(i){
+  queue.splice(i,1); renderQueue();
+}
+
+function clearQueue(){
+  queue=[]; renderQueue();
+  document.getElementById('feedback').style.display='none';
+}
+
+function submitAll(){
+  if(!queue.length) return;
+  queue.forEach(s=>{
+    if(!data[s.l])data[s.l]=[];
+    data[s.l].push({date:s.date,w:s.w,r:s.r,n:s.n});
+    data[s.l].sort((a,b)=>a.date.localeCompare(b.date));
+  });
+  lss('gym_d',data); fbSave();
+  const total=queue.length;
+  queue=[];
+  renderQueue();
+  const fb=document.getElementById('feedback');
+  fb.className='feedback ok';
+  fb.innerHTML=`✓ ${total} set${total>1?'s':''} saved. Nice work.`;
+  fb.style.display='block';
+  liftChanged();
+}
+
+// ── PROGRESS ─────────────────────────────────────────
 function renderProgress(){
   const all=[{id:'bw',label:'⚖️ Body Weight'},...ALL.map(l=>({id:l,label:l}))];
   document.getElementById('progChips').innerHTML=all.map(c=>
@@ -796,7 +876,7 @@ function drawChart(labels,vals,color,dots){
   });
 }
 
-// ── MODAL ─────────────────────────────────────────────
+// ── MODAL ────────────────────────────────────────────
 function openMod(l){
   modLift=l;const L=last(l);
   document.getElementById('mTitle').textContent=`Set Level — ${l}`;
