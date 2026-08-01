@@ -1,0 +1,16 @@
+{
+  "name": "Erik's Training",
+  "short_name": "Training",
+  "description": "Upper-focused split tracker. 75% of sets to failure before the weight moves.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#090d0d",
+  "theme_color": "#090d0d",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
