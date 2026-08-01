@@ -202,9 +202,17 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 
 <!-- ============ TODAY ============ -->
 <div class="pg on" id="pg-today">
-  <div id="nextCard"></div>
   <div class="rot-strip" id="rotStrip"></div>
-  <div class="mini-row">
+  <div id="exCards"></div>
+  <div class="field" style="margin-top:20px"><label>Write your workout &mdash; like Notes</label>
+    <textarea id="impText" style="min-height:170px" placeholder="Bench press 135 warmup&#10;195 for 9, 7, 6 failure on all&#10;Pull ups 12, 8, 8&#10;Lateral raises 25s for 10, 9, 7 failure&#10;Bicep curls 40 for 9, 7"></textarea>
+  </div>
+  <div class="two" style="margin-bottom:12px">
+    <div class="field" style="margin-bottom:0"><label>Date</label><input type="date" id="impDate"></div>
+    <div class="field" style="margin-bottom:0;display:flex;align-items:flex-end"><button class="save-btn" style="margin-top:0" onclick="runParse()">Save</button></div>
+  </div>
+  <div id="impOut"></div>
+  <div class="mini-row" style="margin-top:20px;margin-bottom:0">
     <div class="mini">
       <div class="mini-l">Body Weight</div>
       <div class="mini-v" id="bwV">&#8212;</div>
@@ -217,7 +225,6 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
       <div class="mini-in"><input id="prIn" type="number" inputmode="numeric" step="5" placeholder="grams"><button onclick="saveProtein()">Log</button></div>
     </div>
   </div>
-  <div id="exCards"></div>
 </div>
 
 <!-- ============ PROGRESS ============ -->
@@ -246,18 +253,6 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   </div>
 </div>
 
-<!-- ============ IMPORT ============ -->
-<div class="pg" id="pg-import">
-  <div class="pg-title">Import</div>
-  <div class="pg-sub">Paste straight from Apple Notes. It reads your shorthand &mdash; dumbbell "35s", half reps like 8.5, "failure", "1 RIR", and warm-up sets. Nothing saves until you check it and add dates.</div>
-  <div class="field">
-    <label>Paste your notes</label>
-    <textarea id="impText" style="min-height:150px" placeholder="Sunday push&#10;Bench press 135 warmup&#10;185 for 10, 7, 7, 7,&#10;Pull ups for 10, 9, 7"></textarea>
-  </div>
-  <button class="add-btn" onclick="runParse()">Read these notes</button>
-  <div id="impOut" style="margin-top:20px"></div>
-</div>
-
 <!-- ============ PLAN ============ -->
 <div class="pg" id="pg-plan">
   <div class="pg-title">The Plan</div>
@@ -280,57 +275,9 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 </div>
 
 <div class="nav">
-  <button class="ntab on" id="nt-today" onclick="goPage('today')"><span class="ni">&#127947;</span>Today</button>
+  <button class="ntab on" id="nt-today" onclick="goPage('today')"><span class="ni">&#9997;</span>Today</button>
   <button class="ntab" id="nt-progress" onclick="goPage('progress')"><span class="ni">&#128200;</span>Progress</button>
-  <button class="ntab" id="nt-import" onclick="goPage('import')"><span class="ni">&#128229;</span>Import</button>
   <button class="ntab" id="nt-plan" onclick="goPage('plan')"><span class="ni">&#128203;</span>Plan</button>
-</div>
-
-<!-- ===== LOG MODAL ===== -->
-<div class="modal-bg" id="logBg" onclick="if(event.target===this)closeLog()">
-  <div class="sheet">
-    <div class="sheet-hd"><h3 id="logTitle">Log</h3><button class="x" onclick="closeLog()">&#10005;</button></div>
-    <div class="sheet-sub" id="logSub"></div>
-    <div id="logTgt"></div>
-    <div class="field"><label>Date</label><input type="date" id="logDate"></div>
-    <div class="two">
-      <div class="field"><label id="logWLbl">Weight</label><input type="number" id="logW" inputmode="decimal" step="2.5"></div>
-      <div class="field"><label>Reps</label><input type="number" id="logR" inputmode="decimal" step="0.5" placeholder="&#8212;"></div>
-    </div>
-    <div class="qreps" id="logQ"></div>
-    <div class="toggles" style="margin-top:15px">
-      <button class="tg" id="tgF" onclick="togF()">&#128293; To failure</button>
-      <button class="tg" id="tgW" onclick="togW()">Warm-up set</button>
-    </div>
-    <button class="add-btn" onclick="addSet()">+ Add set</button>
-    <div id="qWrap" style="display:none">
-      <div class="qhd"><span id="qCount">0 sets</span><button onclick="clearQ()" style="background:none;border:none;color:var(--muted);font-size:.7rem;cursor:pointer;font-family:inherit;">Clear all</button></div>
-      <div class="qlist" id="qList"></div>
-      <div class="frate" id="frateBox"></div>
-    </div>
-    <div class="field" style="margin-top:16px"><label>Note (optional)</label><textarea id="logNote" placeholder="e.g. better form, parallel to the ground"></textarea></div>
-    <button class="save-btn" onclick="saveSession()">Save session</button>
-  </div>
-</div>
-
-<!-- ===== SWAP MODAL ===== -->
-<div class="modal-bg" id="swapBg" onclick="if(event.target===this)closeSwap()">
-  <div class="sheet">
-    <div class="sheet-hd"><h3>Swap exercise</h3><button class="x" onclick="closeSwap()">&#10005;</button></div>
-    <div class="sheet-sub" id="swapSub"></div>
-    <div id="swapList"></div>
-  </div>
-</div>
-
-<!-- ===== GOLF MODAL ===== -->
-<div class="modal-bg" id="golfBg" onclick="if(event.target===this)closeGolf()">
-  <div class="sheet">
-    <div class="sheet-hd"><h3>Log a round</h3><button class="x" onclick="closeGolf()">&#10005;</button></div>
-    <div class="sheet-sub">Walking 18 replaces your Lower day in summer.</div>
-    <div class="field"><label>Date</label><input type="date" id="golfDate"></div>
-    <div class="field"><label>Holes walked</label><input type="number" id="golfHoles" inputmode="numeric" value="18"></div>
-    <button class="save-btn" onclick="saveGolf()">Save round</button>
-  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -574,18 +521,8 @@ function setSeason(s){
 /* ---------- TODAY ---------- */
 function renderToday(){
   document.getElementById('topDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  renderBW(); renderProtein(); renderNext(); renderStrip(); renderExCards();
-}
-function renderNext(){
-  const d=curDay(), isGolf=d==='Golf';
-  const meta=isGolf?'Walk 18 — legs are covered':`${DAYS[d].sub} · ${DAYS[d].items.length} exercises`;
-  document.getElementById('nextCard').innerHTML=
-   `<div class="next-card"><div class="next-label">Next up</div>
-    <div class="next-name">${d}</div><div class="next-meta">${meta}</div>
-    <div class="next-btns">
-      <button class="nb pri" onclick="advance()">&#10003; Done — next day</button>
-      <button class="nb" onclick="stepBack()">&#8592; Back</button>
-    </div></div>`;
+  if(!document.getElementById('impDate').value) document.getElementById('impDate').value=todayStr();
+  renderBW(); renderProtein(); renderStrip(); renderExCards();
 }
 function renderStrip(){
   document.getElementById('rotStrip').innerHTML=rot().map((d,i)=>
@@ -623,158 +560,29 @@ function renderExCards(){
   const d=curDay(), box=document.getElementById('exCards');
   if(d==='Golf'){
     const g=S.golf[todayStr()];
-    box.innerHTML=`<div class="golf-card"><div class="gi">&#9971;</div>
-      <div class="gt">${g?`${g} holes walked`:'Walk 18'}</div>
-      <div class="gs">Your summer swap for the Lower day.<br>Legs get covered on the course.</div>
-      <button class="log-btn" onclick="openGolf()">${g?'Edit round':'Log a round'}</button></div>`;
+    box.innerHTML=`<div class="plan-day"><h4>&#9971; Golf day</h4>
+      <div class="pd-s">Summer swap for Lower — legs get covered on the course.</div>
+      <button class="nb ${g?'':'pri'}" onclick="quickGolf()">${g?`&#10003; ${g} holes logged`:'Walked 18 — log it'}</button></div>`;
     return;
   }
-  box.innerHTML = DAYS[d].items.map((p,i)=>{
+  // One line per lift: name, then exactly what to do today. Tap nothing — just read, lift, write.
+  const rows = DAYS[d].items.map((p,i)=>{
     const ex = S.swaps[d+'|'+i] || p.ex;
     const v  = verdict(ex,p);
-    const last = lastOf(ex);
-    const doneToday = (S.log[ex]||[]).some(s=>s.date===todayStr());
-    const ago = last ? (dAgo(last.date)===0?'today':dAgo(last.date)===1?'yesterday':`${dAgo(last.date)}d ago`) : 'never';
+    const done = (S.log[ex]||[]).some(s=>s.date===todayStr());
     const vk = VK[v.kind];
-    const tgt = v.w===null ? `— × ${nRep(v.r)}` : `${fmtW(ex,v.w)} × ${nRep(v.r)}`;
-    const altLine = p.alt ? `<div class="ex-alt">or ${p.alt}</div>` : '';
-    if(doneToday){
+    if(done){
       const s=(S.log[ex]||[]).find(x=>x.date===todayStr());
-      const fr=Math.round(failRate(s.sets)*100);
-      return `<div class="ex-card done"><div class="ex-top"><div>
-        <div class="ex-name">${ex}</div>
-        <div class="ex-presc">${p.sets} × ${p.lo}–${p.hi}</div>
-        <div class="badge done">&#10003; Logged · ${fr}% to failure</div>
-        <div class="ex-target" style="color:var(--teal)">${fmtSets(ex,s.sets)}</div>
-        ${s.note?`<div class="ex-why">“${s.note}”</div>`:''}
-      </div><div class="ex-btns"><button class="log-btn alt" onclick="openLog('${d}',${i})">Edit</button></div></div></div>`;
+      return `<div class="plan-line" style="color:var(--teal)"><b style="color:var(--teal)">&#10003; ${ex}</b><span style="color:var(--teal)">${fmtSets(ex,s.sets)}</span></div>`;
     }
-    return `<div class="ex-card ${v.kind==='up'?'up':''}"><div class="ex-top"><div>
-      <div class="ex-name">${ex}</div>
-      <div class="ex-presc">${p.sets} × ${p.lo}–${p.hi} &nbsp;·&nbsp; last ${ago}</div>
-      ${altLine}
-      <div class="badge ${vk.c}">${vk.l}</div>
-      <div class="ex-target">${tgt}</div>
-      <div class="ex-why">${v.why}</div>
-      <div class="ex-last">${last?`Last: ${fmtSets(ex,last.sets)}`:'No history yet'}</div>
-    </div><div class="ex-btns">
-      <button class="log-btn" onclick="openLog('${d}',${i})">Log</button>
-      <button class="swap-btn" onclick="openSwap('${d}',${i})">Swap</button>
-    </div></div></div>`;
+    const tgt = v.w===null ? `pick a weight × ${nRep(v.r)}` : `${fmtW(ex,v.w)} × ${nRep(v.r)}`;
+    const mark = v.kind==='up' ? ' &#128293;' : v.kind==='hard' ? ' &#9888;' : '';
+    return `<div class="plan-line"><b>${ex}${mark}</b><span>${p.sets} sets · ${tgt}</span></div>`;
   }).join('');
+  box.innerHTML=`<div class="plan-day"><h4>${d} <span style="color:var(--muted);font-weight:400;font-size:.72rem">· ${DAYS[d].sub}</span></h4>
+    <div class="pd-s">&#128293; = weight goes up &nbsp; &#9888; = under 75% to failure last time, weight stays</div>${rows}</div>`;
 }
-
-/* ---------- swap ---------- */
-let swapKey=null;
-function openSwap(d,i){
-  swapKey=d+'|'+i;
-  const p=DAYS[d].items[i], cur=S.swaps[swapKey]||p.ex;
-  document.getElementById('swapSub').textContent=`${p.sets} × ${p.lo}–${p.hi}. History follows the exercise, so swapping never loses anything.`;
-  const opts=[p.ex, p.alt].filter(Boolean).concat(EX_NAMES.filter(n=>n!==p.ex&&n!==p.alt));
-  document.getElementById('swapList').innerHTML=opts.map(n=>
-    `<button class="tg" style="width:100%;margin-bottom:8px;text-align:left;padding:14px 16px${n===cur?';border-color:var(--teal);color:var(--teal)':''}" onclick="doSwap('${n.replace(/'/g,"\\'")}')">${n}${n===cur?' &#10003;':''}</button>`).join('');
-  document.getElementById('swapBg').classList.add('on');
-}
-function closeSwap(){document.getElementById('swapBg').classList.remove('on');}
-function doSwap(n){
-  const p=DAYS[swapKey.split('|')[0]].items[+swapKey.split('|')[1]];
-  if(n===p.ex) delete S.swaps[swapKey]; else S.swaps[swapKey]=n;
-  save();closeSwap();renderExCards();toast('Swapped to '+n);
-}
-
-/* ---------- golf ---------- */
-function openGolf(){
-  document.getElementById('golfDate').value=todayStr();
-  document.getElementById('golfHoles').value=S.golf[todayStr()]||18;
-  document.getElementById('golfBg').classList.add('on');
-}
-function closeGolf(){document.getElementById('golfBg').classList.remove('on');}
-function saveGolf(){
-  const d=document.getElementById('golfDate').value,h=parseInt(document.getElementById('golfHoles').value);
-  if(!d||isNaN(h)){toast('Check the date and holes');return;}
-  S.golf[d]=h;save();closeGolf();renderExCards();toast(h+' holes logged');
-}
-
-/* ---------- log modal ---------- */
-function openLog(d,i){
-  const p=DAYS[d].items[i]; curPresc=p;
-  curEx = S.swaps[d+'|'+i] || p.ex;
-  const existing=(S.log[curEx]||[]).find(s=>s.date===todayStr());
-  curSets = existing ? existing.sets.map(s=>({...s})) : [];
-  fFlag=false; wFlag=false;
-  const v=verdict(curEx,p), vk=VK[v.kind];
-  document.getElementById('logTitle').textContent=curEx;
-  document.getElementById('logSub').textContent=`${p.sets} sets × ${p.lo}–${p.hi} reps`;
-  document.getElementById('logTgt').innerHTML=
-    `<div class="tgt-box ${vk.c}"><div class="tgt-l">${vk.l}</div>
-     <div class="tgt-v">${v.w===null?'— ':fmtW(curEx,v.w)+' '}× ${nRep(v.r)}</div>
-     <div class="tgt-w">${v.why}</div></div>`;
-  document.getElementById('logDate').value = existing?existing.date:todayStr();
-  document.getElementById('logNote').value = existing?(existing.note||''):'';
-  const u=EX[curEx].unit;
-  document.getElementById('logWLbl').textContent = u==='bw'?'Added weight (0 = bodyweight)': u==='db'?'Weight per hand':'Weight (lbs)';
-  document.getElementById('logW').value = v.w===null?'':v.w;
-  document.getElementById('logR').value='';
-  const qs=[]; for(let n=p.lo;n<=p.hi;n++) qs.push(n);
-  document.getElementById('logQ').innerHTML=qs.map(n=>
-    `<button class="qr ${n===Math.round(v.r)?'hi':''}" onclick="document.getElementById('logR').value=${n}">${n}</button>`).join('')
-    + `<button class="qr" onclick="bumpHalf()">+½</button>`;
-  syncTg(); renderQ();
-  document.getElementById('logBg').classList.add('on');
-}
-function bumpHalf(){const el=document.getElementById('logR');const v=parseFloat(el.value);el.value=isNaN(v)?0.5:(v+0.5);}
-function closeLog(){document.getElementById('logBg').classList.remove('on');curEx=null;curSets=[];}
-function togF(){fFlag=!fFlag;syncTg();}
-function togW(){wFlag=!wFlag;if(wFlag)fFlag=false;syncTg();}
-function syncTg(){
-  document.getElementById('tgF').className='tg'+(fFlag?' on-f':'');
-  document.getElementById('tgW').className='tg'+(wFlag?' on-w':'');
-}
-function addSet(){
-  const u=EX[curEx].unit;
-  const w=parseFloat(document.getElementById('logW').value)||0;
-  const r=parseFloat(document.getElementById('logR').value);
-  if(isNaN(r)||r<=0){toast('Enter reps');return;}
-  if(u!=='bw'&&w<=0&&!wFlag){toast('Enter a weight');return;}
-  curSets.push({w,r,f:fFlag,warm:wFlag});
-  document.getElementById('logR').value='';
-  fFlag=false; wFlag=false; syncTg(); renderQ();
-}
-function rmSet(i){curSets.splice(i,1);renderQ();}
-function clearQ(){curSets=[];renderQ();}
-function renderQ(){
-  const wrap=document.getElementById('qWrap');
-  if(!curSets.length){wrap.style.display='none';return;}
-  wrap.style.display='block';
-  const ws=curSets.filter(s=>!s.warm);
-  document.getElementById('qCount').textContent=`${ws.length} working set${ws.length===1?'':'s'}${curSets.length>ws.length?` + ${curSets.length-ws.length} warm-up`:''}`;
-  document.getElementById('qList').innerHTML=curSets.map((s,i)=>
-    `<div class="qitem ${s.warm?'warm':''}"><div>
-      <div class="qi-l">${s.warm?'Warm-up':'Set '+(curSets.slice(0,i+1).filter(x=>!x.warm).length)}</div>
-      <div class="qi-v">${fmtW(curEx,s.w)} × ${nRep(s.r)}${s.f?'<span class="qi-f">FAILURE</span>':''}${s.warm?'<span class="qi-w">WARM</span>':''}</div>
-    </div><button class="qrm" onclick="rmSet(${i})">&#10005;</button></div>`).join('');
-  const fr=ws.length?ws.filter(s=>s.f).length/ws.length:0, pct=Math.round(fr*100), ok=fr>=FAILURE_RULE;
-  const need=Math.max(0,Math.ceil(ws.length*FAILURE_RULE)-ws.filter(s=>s.f).length);
-  document.getElementById('frateBox').innerHTML=
-   `<div class="frate-t"><span>Sets to failure</span><b style="color:${ok?'var(--teal)':'var(--red)'}">${pct}%</b></div>
-    <div class="frate-bar"><i style="width:${pct}%;background:${ok?'var(--teal)':'var(--red)'}"></i><u></u></div>
-    <div class="frate-m" style="color:${ok?'var(--teal)':'var(--red)'}">${ok
-      ? 'Clears the 75% rule — weight can go up when you hit the top of the range.'
-      : `Below the 75% rule. ${need} more set${need===1?'':'s'} to failure and the weight can move.`}</div>`;
-}
-function saveSession(){
-  const ws=curSets.filter(s=>!s.warm);
-  if(!ws.length){toast('Add at least one working set');return;}
-  const date=document.getElementById('logDate').value;
-  if(!date){toast('Set a date');return;}
-  if(!S.log[curEx]) S.log[curEx]=[];
-  S.log[curEx]=S.log[curEx].filter(s=>s.date!==date);
-  S.log[curEx].push({date,sets:curSets.map(s=>({...s})),note:document.getElementById('logNote').value.trim()});
-  S.log[curEx].sort((a,b)=>a.date.localeCompare(b.date));
-  save(); closeLog(); renderExCards();
-  const fr=Math.round(failRate(ws.map(s=>s)) *100);
-  toast(`Saved · ${fr}% to failure`);
-}
+function quickGolf(){S.golf[todayStr()]=18;save();renderExCards();toast('18 holes logged');}
 
 /* ---------- PROGRESS ---------- */
 function renderProgress(){
@@ -1004,9 +812,18 @@ function parseNotes(text){
 
 function runParse(){
   const txt=document.getElementById('impText').value.trim();
-  if(!txt){toast('Paste something first');return;}
+  if(!txt){toast('Write something first');return;}
   parsed=parseNotes(txt);
   if(!parsed.length){document.getElementById('impOut').innerHTML='<div class="no-data">Couldn\'t find any sets in that. Check the format and try again.</div>';return;}
+  const unknown=parsed.reduce((n,s)=>n+s.lifts.filter(l=>l.ex.startsWith('?')).length,0);
+  // The normal case: today's workout, written in one go — save it, no ceremony.
+  // The check screen only appears for a multi-session paste or an unmatched name.
+  if(parsed.length===1 && !unknown){
+    parsed[0].date=document.getElementById('impDate').value||todayStr();
+    commitImport();
+    return;
+  }
+  parsed.forEach(s=>{if(!s.date&&parsed.length===1)s.date=document.getElementById('impDate').value||todayStr();});
   renderImport();
 }
 function renderImport(){
@@ -1039,22 +856,26 @@ function setImpEx(si,li,v){if(v)parsed[si].lifts[li].ex=v;renderImport();}
 function commitImport(){
   const missing=parsed.filter(s=>!s.date).length;
   if(missing){toast(`${missing} session${missing===1?'':'s'} still need a date`);return;}
-  let n=0,skipped=0;
+  let n=0,skipped=0;const lines=[];
   parsed.forEach(s=>{
     s.lifts.forEach(l=>{
-      if(l.ex.startsWith('?')){skipped++;return;}
-      if(!EX[l.ex]){skipped++;return;}
+      if(l.ex.startsWith('?')||!EX[l.ex]){skipped++;return;}
       if(!S.log[l.ex]) S.log[l.ex]=[];
       S.log[l.ex]=S.log[l.ex].filter(x=>x.date!==s.date);
       S.log[l.ex].push({date:s.date,sets:l.sets.map(x=>({w:x.w,r:x.r,f:!!x.f,warm:!!x.warm})),note:''});
       S.log[l.ex].sort((a,b)=>a.date.localeCompare(b.date));
+      const sets={sets:l.sets}, fr=Math.round(failRate(l.sets)*100);
+      lines.push(`<div class="plan-line"><b>${l.ex}</b><span>${fmtSets(l.ex,l.sets)} · ${fr}%f</span></div>`);
       n++;
     });
   });
   save();
-  document.getElementById('impOut').innerHTML=`<div class="no-data" style="color:var(--teal)">Saved ${n} exercise${n===1?'':'s'}${skipped?` · ${skipped} skipped`:''}.<br>Check the Progress tab.</div>`;
+  // show him exactly what got read — one glance, fix anything wrong on the Today tab
+  document.getElementById('impOut').innerHTML=
+    `<div class="plan-day"><h4 style="color:var(--teal)">&#10003; Saved ${n} lift${n===1?'':'s'}${skipped?` · ${skipped} skipped`:''}</h4>
+     <div class="pd-s">Read wrong? Write it again and save — same date overwrites.</div>${lines.join('')}</div>`;
   document.getElementById('impText').value='';
-  parsed=null; toast('Imported');
+  parsed=null; toast('Saved'); renderToday();
 }
 
 /* ---------- service worker ---------- */

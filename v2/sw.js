@@ -1,6 +1,6 @@
 /* Erik's Training — offline shell.
    Bump CACHE when index.html changes so phones pick up the new version. */
-const CACHE = 'training-v2-1';
+const CACHE = 'training-v2-2';
 const SHELL = [
   '.', 'index.html', 'manifest.webmanifest',
   'icon-180.png', 'icon-192.png', 'icon-512.png',
