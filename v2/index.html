@@ -23,9 +23,6 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .bar-left h1{font-size:.95rem;font-weight:800;letter-spacing:-.3px;}
 .bar-left h1 span{color:var(--teal);}
 .bar-date{font-size:.68rem;color:var(--muted2);margin-top:2px;}
-.season{display:flex;background:var(--card);border:1px solid var(--border);border-radius:20px;overflow:hidden;}
-.season button{background:none;border:none;color:var(--muted2);font-size:.66rem;font-weight:800;padding:7px 12px;cursor:pointer;font-family:inherit;-webkit-appearance:none;letter-spacing:.4px;}
-.season button.on{background:var(--teal);color:#000;border-radius:20px;}
 .nav{position:fixed;bottom:0;left:0;right:0;background:rgba(9,13,13,.96);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-top:1px solid var(--border);display:flex;padding-bottom:env(safe-area-inset-bottom,0);z-index:10;}
 .ntab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:11px 4px;background:none;border:none;color:var(--muted);font-size:.58rem;font-weight:700;cursor:pointer;-webkit-appearance:none;letter-spacing:.5px;text-transform:uppercase;font-family:inherit;}
 .ntab .ni{font-size:1.15rem;line-height:1;}
@@ -76,10 +73,6 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .log-btn{background:var(--teal);color:#000;border:none;border-radius:11px;padding:11px 17px;font-size:.82rem;font-weight:800;cursor:pointer;font-family:inherit;-webkit-appearance:none;}
 .log-btn.alt{background:var(--card2);border:1px solid var(--teal);color:var(--teal);}
 .swap-btn{background:none;border:1px solid var(--border);color:var(--muted2);border-radius:9px;padding:6px 10px;font-size:.62rem;cursor:pointer;font-family:inherit;-webkit-appearance:none;font-weight:700;}
-.golf-card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:38px 24px;text-align:center;}
-.golf-card .gi{font-size:2.6rem;margin-bottom:12px;}
-.golf-card .gt{font-size:1.25rem;font-weight:800;margin-bottom:7px;}
-.golf-card .gs{font-size:.85rem;color:var(--muted2);line-height:1.6;margin-bottom:18px;}
 .chips{display:flex;gap:7px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px;margin-bottom:18px;}
 .chips::-webkit-scrollbar{display:none;}
 .chip{flex-shrink:0;background:var(--card);border:1px solid var(--border);color:var(--muted2);padding:8px 15px;border-radius:100px;font-size:.72rem;font-weight:700;cursor:pointer;-webkit-appearance:none;white-space:nowrap;font-family:inherit;}
@@ -193,11 +186,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   </div>
   <div style="display:flex;align-items:center;gap:9px;">
     <span id="userLabel" style="font-size:.66rem;color:var(--muted2);cursor:pointer;" onclick="doSignOut()">Sign out</span>
-    <div class="season">
-      <button id="sYear" onclick="setSeason('year')">FULL</button>
-      <button id="sSummer" onclick="setSeason('summer')">GOLF</button>
-    </div>
-  </div>
+      </div>
 </div>
 
 <!-- ============ TODAY ============ -->
@@ -352,11 +341,10 @@ const DAYS = {
     {ex:'Weighted Crunch',   alt:null,               sets:3, lo:15, hi:20}
   ]}
 };
-const ROT_YEAR   = ['Upper A','Lower','Upper B'];
-const ROT_SUMMER = ['Upper A','Golf','Upper B'];
+const ROT = ['Upper A','Lower','Upper B'];
 
 /* ---------- state ---------- */
-const BLANK = {log:{}, rot:0, season:'summer', bw:{}, protein:{}, golf:{}, swaps:{}};
+const BLANK = {log:{}, rot:0, bw:{}, protein:{}, golf:{}, swaps:{}};
 let S = load();
 let uid=null, dbRef=null, fbAuth=null, fbDB=null;
 let curEx=null, curPresc=null, curSets=[], fFlag=false, wFlag=false;
@@ -436,7 +424,7 @@ fbAuth.onAuthStateChanged(u=>{
 
 /* ---------- helpers ---------- */
 const todayStr=()=>new Date().toISOString().split('T')[0];
-const rot=()=>S.season==='summer'?ROT_SUMMER:ROT_YEAR;
+const rot=()=>ROT;
 const curDay=()=>rot()[S.rot % rot().length];
 const work=s=>(s.sets||[]).filter(x=>!x.warm);
 const sorted=a=>[...a].sort((x,y)=>x.date.localeCompare(y.date));
@@ -499,8 +487,6 @@ const VK={start:{l:'Start here',c:'start'},hard:{l:'Push harder',c:'hard'},rep:{
 
 /* ---------- boot / nav ---------- */
 function boot(){
-  document.getElementById('sYear').className   = S.season==='year'?'on':'';
-  document.getElementById('sSummer').className = S.season==='summer'?'on':'';
   renderToday(); renderPlan();
 }
 function goPage(n){
@@ -512,10 +498,6 @@ function goPage(n){
   if(n==='progress') renderProgress();
   if(n==='plan')     renderPlan();
   window.scrollTo(0,0);
-}
-function setSeason(s){
-  S.season=s; S.rot=0; save(); boot();
-  toast(s==='summer'?'Summer — legs swap for golf':'Full rotation, legs back in');
 }
 
 /* ---------- TODAY ---------- */
@@ -558,13 +540,6 @@ function saveProtein(){
 
 function renderExCards(){
   const d=curDay(), box=document.getElementById('exCards');
-  if(d==='Golf'){
-    const g=S.golf[todayStr()];
-    box.innerHTML=`<div class="plan-day"><h4>&#9971; Golf day</h4>
-      <div class="pd-s">Summer swap for Lower — legs get covered on the course.</div>
-      <button class="nb ${g?'':'pri'}" onclick="quickGolf()">${g?`&#10003; ${g} holes logged`:'Walked 18 — log it'}</button></div>`;
-    return;
-  }
   // One line per lift: name, then exactly what to do today. Tap nothing — just read, lift, write.
   const rows = DAYS[d].items.map((p,i)=>{
     const ex = S.swaps[d+'|'+i] || p.ex;
@@ -582,7 +557,6 @@ function renderExCards(){
   box.innerHTML=`<div class="plan-day"><h4>${d} <span style="color:var(--muted);font-weight:400;font-size:.72rem">· ${DAYS[d].sub}</span></h4>
     <div class="pd-s">&#128293; = weight goes up &nbsp; &#9888; = under 75% to failure last time, weight stays</div>${rows}</div>`;
 }
-function quickGolf(){S.golf[todayStr()]=18;save();renderExCards();toast('18 holes logged');}
 
 /* ---------- PROGRESS ---------- */
 function renderProgress(){
@@ -673,9 +647,7 @@ function renderPlan(){
   document.getElementById('planBody').innerHTML=Object.entries(DAYS).map(([n,d])=>
     `<div class="plan-day"><h4>${n}</h4><div class="pd-s">${d.sub}</div>
      ${d.items.map(p=>`<div class="plan-line"><b>${p.ex}${p.alt?` <span style="color:var(--muted);font-weight:400">or ${p.alt}</span>`:''}</b><span>${p.sets} × ${p.lo}–${p.hi}</span></div>`).join('')}
-     </div>`).join('') +
-    `<div class="plan-day"><h4>Golf</h4><div class="pd-s">summer swap for Lower</div>
-     <div class="plan-line"><b>Walk 18 holes</b><span>1 round</span></div></div>`;
+     </div>`).join('');
 }
 
 /* ============================================================
