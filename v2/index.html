@@ -257,6 +257,13 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   </div>
   <div id="planBody"></div>
   <div class="chart-card" style="margin-top:6px">
+    <div class="chart-title">Load your old workouts</div>
+    <div class="pg-sub" style="margin-bottom:14px">Safe to press twice &mdash; a session with the same date overwrites, it never duplicates.</div>
+    <button class="nb" style="width:100%;margin-bottom:9px" onclick="pullOldApp()">&#8681; Pull in the old app's history</button>
+    <button class="nb" style="width:100%" onclick="loadNotesHistory()">&#9997; Load my 5 Apple Notes sessions</button>
+    <div id="histOut" style="margin-top:14px"></div>
+  </div>
+  <div class="chart-card">
     <div class="chart-title">Reset the rotation</div>
     <div class="pg-sub" style="margin-bottom:14px">Puts you back at the start of the cycle.</div>
     <button class="nb" onclick="resetRotation()">&#8635; Back to Upper A</button>
@@ -640,6 +647,111 @@ function line(id,labels,vals,color,dots,old,extra){
   return new Chart(ctx,{type:'line',data:{labels,datasets:[{data:vals,borderColor:color,backgroundColor:g,borderWidth:2,fill:true,tension:.3,pointBackgroundColor:dots||color,pointBorderColor:'#090d0d',pointBorderWidth:2,pointRadius:4}]},
     options:{responsive:true,maintainAspectRatio:false,animation:{duration:200},
       plugins:{legend:{display:false},tooltip:{backgroundColor:'#111b1a',borderColor:color,borderWidth:1,titleColor:color,bodyColor:'#9ab8b5',padding:11,cornerRadius:9}},scales}});
+}
+
+/* ============================================================
+   LOADING OLD WORKOUTS
+   ============================================================ */
+
+/* The old app's data auto-copies on the FIRST v2 sign-in only. If v2 already
+   existed by then (e.g. he tested first), that copy never ran — this redoes it
+   on demand. Reads the old keys, never writes to them. */
+function pullOldApp(){
+  const out=document.getElementById('histOut');
+  if(!dbRef){out.innerHTML='<div class="no-data">Sign in first — the old history lives in your account, not on this device.</div>';return;}
+  out.innerHTML='<div class="no-data">Reading your old app data…</div>';
+  dbRef.once('value').then(snap=>{
+    const o=snap.val()||{};
+    if(!o.gym_d){out.innerHTML='<div class="no-data">Nothing found under the old app\'s data.</div>';return;}
+    let added=0, lifts=[];
+    for(const [k,v] of Object.entries(o.gym_d)){
+      const nk=V1_MAP[k]; if(!nk||!Array.isArray(v)||!v.length) continue;
+      if(!S.log[nk]) S.log[nk]=[];
+      v.forEach(x=>{
+        S.log[nk]=S.log[nk].filter(e=>e.date!==x.date);
+        S.log[nk].push({date:x.date,sets:(x.sets||[{w:x.w||0,r:x.r||0}]).map(t=>({w:+t.w||0,r:+t.r||0,f:false,warm:false})),note:x.n||''});
+        added++;
+      });
+      S.log[nk].sort((a,b)=>a.date.localeCompare(b.date));
+      lifts.push(`<div class="plan-line"><b>${nk}</b><span>${v.length} sessions</span></div>`);
+    }
+    if(o.gym_bw) S.bw=Object.assign({},o.gym_bw,S.bw);
+    save(); renderToday();
+    out.innerHTML=`<div class="plan-day" style="margin:0"><h4 style="color:var(--teal)">&#10003; Pulled in ${added} sessions</h4>
+      <div class="pd-s">None of these have failure marks — the old app didn't record them, so they'll read 0% and won't move any weight. That's expected.</div>${lifts.join('')}</div>`;
+    toast(`${added} old sessions loaded`);
+  }).catch(e=>{out.innerHTML='<div class="no-data">Couldn\'t read it: '+e.message+'</div>';});
+}
+
+/* The five sessions Erik pasted on 2026-07-31. Kept as his raw text so they run
+   through the same parser as anything else he types. */
+const NOTES_HISTORY=[
+`Sunday push
+Bench press 135 warmup
+185 for 10, 7, 7, 7,
+Overhead shoulder press
+115 for 9, 7, 5
+Pull ups for 10, 9, 7,
+Rows 115 for 9, 8, 7
+Skull crusher laying 25s for 8, 10, 8
+Bicep curl 35s for 12, 10, 8`,
+`Thursday pull
+Row 135 for 10, 9, 7, 7
+Pull-ups for 10, 8.5, 7, 7,
+Dumbbell incline press 75s for 7, 6, 6
+Lateral raises 15s for 18, 15, 14, 14,
+Rear delt bench supported flys 10s for 10, 10, 9
+Bicep curl 35s for 12, 9, 9, 8
+Tricep extensions 45s for 9, 8, 6, 6`,
+`Saturday upper day
+Dips 11, 11, failure on both
+Pull-ups 11, 9, failure on both
+Bench press 195 for 9, 7, failure on both
+Bicep curls 35 for 13,11
+Shoulder lateral raises 20s for 13,11, 9
+Tricep cable extensions not sure the weight bu I'll go to failure 7, 9
+Rows with 50 dumbbell 13, 9`,
+`Tuesday upper day
+Bench press 135 warmup 195 for 9, 7, 6 (fail or 1 RIR on all)
+Shoulder press 115 for 9, 7, 6 (fail or 1 RIR on all)
+Rows 135 for 11, 10 (failure) 7
+Pull-ups 12, 8, 8
+Shoulder lateral raises
+25 for 10, 9.5 (failure) 6.5 (failure)
+Bicep curls 40 for 9, 7,
+Tricep extensions 50 for 6.5, 7 (faileure)`,
+`Thursday upper day pull focus
+Rows 135 (better form this time I'm parallel to the ground) 9,  7.5, 5 (failure on all)
+Pull-ups 12, 11, 9 (failure)
+Incline bench press 75s for 9, 8, 5 (failure dropset to 50s) I got 5 with 50s
+Bicep curls 40 for 9, 8, 6 7f
+Rear delt flies
+11,11,11`];
+
+/* His notes record day names, not dates. The ORDER is certain (the weights only
+   ever climb), so walk those weekdays backwards from the most recent one to get
+   a spacing that matches how he actually trains. Every date stays editable. */
+function estimateDates(dows){
+  const out=[], d=new Date(); d.setHours(12,0,0,0);
+  // newest first
+  for(let i=dows.length-1;i>=0;i--){
+    while(d.getDay()!==dows[i]) d.setDate(d.getDate()-1);
+    out.unshift(d.toISOString().split('T')[0]);
+    d.setDate(d.getDate()-1);
+  }
+  return out;
+}
+
+function loadNotesHistory(){
+  parsed = NOTES_HISTORY.flatMap(t=>parseNotes(t));
+  const est = estimateDates(parsed.map(s=>s.dow));
+  parsed.forEach((s,i)=>s.date=est[i]);
+  document.getElementById('histOut').innerHTML=
+    `<div class="imp-warn" style="margin:0">Dates below are <b>worked out from your day names</b>, not from your notes — your notes don't have dates. The order is right; if the timing is off, change any date before saving.</div>`;
+  goPage('today');
+  renderImport();
+  document.getElementById('impOut').scrollIntoView({behavior:'smooth',block:'start'});
+  toast('Check the dates, then save');
 }
 
 /* ---------- PLAN ---------- */
