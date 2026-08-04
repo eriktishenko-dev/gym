@@ -349,7 +349,11 @@ function save(){
   });
 }
 addEventListener('online',()=>{if(syncBad)save();});
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&syncBad)save();});
+document.addEventListener('visibilitychange',()=>{
+  if(document.hidden) return;
+  if(syncBad) save();
+  if(typeof renderToday==='function' && document.getElementById('pg-today').classList.contains('on')) renderToday();
+});
 
 /* Union the two states. Newer side wins the single-value fields; for a session
    logged on the same date on both devices, keep the more complete one rather
@@ -548,7 +552,11 @@ function goPage(n){
 /* ---------- TODAY ---------- */
 function renderToday(){
   document.getElementById('topDate').textContent=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-  if(!document.getElementById('impDate').value) document.getElementById('impDate').value=todayStr();
+  // The date field must not go stale. Left open overnight (or in a PWA for
+  // days) it kept showing the day the page was first loaded, so a workout
+  // could save to the wrong date. Refresh it whenever nothing's typed yet.
+  const dEl=document.getElementById('impDate');
+  if(!dEl.value || (!document.getElementById('impText').value.trim() && dEl.value<todayStr())) dEl.value=todayStr();
   renderBW(); renderProtein(); renderStrip(); renderExCards();
 }
 
@@ -916,9 +924,43 @@ function repsBefore(repPart, line, idx){
   return m?m.filter(x=>+x>0&&+x<=60).length:0;
 }
 
+/* Erik writes run-on lines: "75 db incline bench for 10, 9, 6, all to failure
+   shoulder lateral raises, 25s for 12, 10, 10". One line, two exercises. Split
+   the line wherever a new exercise name appears so each gets its own sets —
+   without this, everything after the first name is swallowed as more reps. */
+let ALIAS_RE=null;
+function aliasRe(){
+  if(ALIAS_RE) return ALIAS_RE;
+  const keys=Object.keys(ALIAS).sort((a,b)=>b.length-a.length)
+    .map(k=>k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&').replace(/[\s-]+/g,'[\\s-]+'));
+  ALIAS_RE=new RegExp('(?:'+keys.join('|')+')','gi');
+  return ALIAS_RE;
+}
+function splitLineByExercises(line){
+  const re=aliasRe(); re.lastIndex=0;
+  const hits=[]; let m;
+  while((m=re.exec(line))!==null){
+    const ex=matchEx(m[0]);
+    if(ex && (!hits.length || hits[hits.length-1].ex!==ex)) hits.push({at:m.index, ex});
+    if(m.index===re.lastIndex) re.lastIndex++;
+  }
+  if(hits.length<2) return [line];
+  const parts=[];
+  hits.forEach((h,i)=>{
+    // start each slice at the name, but let the first one keep any leading
+    // weight that was written before it ("75 db incline bench...")
+    const from = i===0 ? 0 : h.at;
+    const to   = i+1<hits.length ? hits[i+1].at : line.length;
+    const seg  = line.slice(from,to).replace(/[,\s]+$/,'').trim();
+    if(seg) parts.push(seg);
+  });
+  return parts;
+}
+
 function parseNotes(text){
   const out=[]; let sess=null, curLine=null;
-  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
+    .flatMap(l=>Object.keys(DOW).some(d=>l.toLowerCase().startsWith(d)) ? [l] : splitLineByExercises(l));
   for(const line of lines){
     const low=line.toLowerCase();
     // session header: a day name, with no rep data on the line
@@ -954,6 +996,9 @@ function parseNotes(text){
     if(!namePart.trim() && firstDigit>0) namePart=workLine.slice(0,firstDigit);
 
     let ex=matchEx(namePart);
+    // The name often follows the weight — "75 db incline bench for 10, 9, 6".
+    // namePart is empty there, so look at the whole line with numbers stripped.
+    if(!ex) ex=matchEx(workLine.replace(/\d+(?:\.\d+)?/g,' '));
     // "Rows with 50 dumbbell" is a dumbbell row, not a barbell row
     if(ex==='Barbell Row' && /dumbbell|dumbell|\bdb\b/.test(low)) ex='DB Row';
     if(ex==='Pull-Up' && /\bwide\b/.test(low)) ex='Wide Pull-Up';

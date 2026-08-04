@@ -77,6 +77,16 @@ function run(){
      'got ' + JSON.stringify(drop.sets.map(s=>s.w+'x'+s.r)));
   ok('dropset: top sets keep top weight', drop.sets.filter(x=>!x.warm)[0].w===75);
 
+  grp('Parser — run-on lines (Erik, 2026-08-04: "it only got some of my lifts")');
+  const runon = parseNotes("75 db incline bench for 10, 9, 6, all to failure shoulder lateral raises, 25s for 12, 10, and 10 all to failure")[0];
+  t('two exercises off ONE line', runon.lifts.map(l=>l.ex), ['Incline DB Press','Lateral Raise']);
+  t('first keeps its weight+sets', runon.lifts[0].sets.map(s=>s.w+'x'+s.r+(s.f?'F':'')), ['75x10F','75x9F','75x6F']);
+  t('second keeps its own weight', runon.lifts[1].sets.map(s=>s.w+'x'+s.r+(s.f?'F':'')), ['25x12F','25x10F','25x10F']);
+  t('name AFTER the weight is found', parseNotes('75 db incline bench for 10, 9, 6')[0].lifts[0].ex, 'Incline DB Press');
+  t('three exercises on one line', parseNotes('Bench 195 for 9, 8, pull ups 12, 10, bicep curls 40 for 9, 8')[0].lifts.map(l=>l.ex),
+    ['Bench Press','Pull-Up','Bicep Curl']);
+  t('one-per-line still unaffected', parseNotes('Bench press 195 for 9, 7\nPull ups 12, 8')[0].lifts.map(l=>l.ex), ['Bench Press','Pull-Up']);
+
   grp('Parser — fails loudly, never silently');
   const noNum = parseNotes('Bench press went heavy today felt strong');
   ok('unreadable line flagged noSets', noNum.length===0 || noNum[0].lifts[0].noSets===true);
