@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Training — tests</title>
+<style>
+body{background:#090d0d;color:#fff;font-family:ui-monospace,Menlo,Consolas,monospace;padding:20px;line-height:1.5;font-size:13px;}
+h1{font-size:1.1rem;margin-bottom:4px;}
+.sub{color:#6b8c88;font-size:.78rem;margin-bottom:18px;}
+#sum{padding:12px 14px;border-radius:10px;margin-bottom:16px;font-weight:700;}
+.ok{background:rgba(30,200,176,.12);border:1px solid rgba(30,200,176,.4);color:#1EC8B0;}
+.bad{background:rgba(232,85,74,.12);border:1px solid rgba(232,85,74,.4);color:#e8554a;}
+.t{padding:6px 0;border-bottom:1px solid #1a2826;}
+.p{color:#1EC8B0;} .f{color:#e8554a;}
+.d{color:#6b8c88;padding-left:20px;font-size:.75rem;white-space:pre-wrap;}
+.grp{margin-top:18px;font-weight:700;color:#f0b429;font-size:.85rem;}
+</style>
+</head>
+<body>
+<h1>Erik's Training — regression tests</h1>
+<div class="sub">Open this file in a browser after ANY edit to index.html. Everything must be green.<br>
+It loads index.html in a hidden frame and runs against its real functions — no copies to drift.</div>
+<div id="sum">running…</div>
+<div id="out"></div>
+<iframe id="app" src="index.html" style="width:0;height:0;border:0;position:absolute;left:-9999px"></iframe>
+<script>
+let pass=0, fail=0, html='';
+function grp(n){ html += `<div class="grp">${n}</div>`; }
+function t(name, got, want){
+  const g=JSON.stringify(got), w=JSON.stringify(want), ok=g===w;
+  ok?pass++:fail++;
+  html += `<div class="t"><span class="${ok?'p':'f'}">${ok?'PASS':'FAIL'}</span> ${name}`
+       + (ok?'':`<div class="d">got:  ${g}\nwant: ${w}</div>`) + `</div>`;
+}
+function ok(name, cond, detail){
+  cond?pass++:fail++;
+  html += `<div class="t"><span class="${cond?'p':'f'}">${cond?'PASS':'FAIL'}</span> ${name}`
+       + (cond?'':`<div class="d">${detail||''}</div>`) + `</div>`;
+}
+
+function run(){
+  const W = document.getElementById('app').contentWindow;
+  if(!W || typeof W.parseNotes!=='function'){ setTimeout(run,80); return; }
+  W.localStorage.clear();
+  // top-level const/let don't attach to window — reach them through the frame's
+  // own global scope so the tests run against the REAL code, not a copy.
+  const G = W.eval('({parseNotes,verdict,failRate,volume,mergeStates,stallRun,prList,todayStr,NOTES_HISTORY,EX,getS:()=>S,setS:v=>{S=v}})');
+  const {parseNotes, verdict, failRate, volume, mergeStates, stallRun, prList, NOTES_HISTORY, EX} = G;
+  const sets = s => s.lifts.map(l=>l.ex+'('+l.sets.filter(x=>!x.warm).map(x=>x.r).join(',')+')').join(' ');
+
+  grp('Parser — Erik\'s 5 real sessions (must never regress)');
+  const H = NOTES_HISTORY.flatMap(x=>parseNotes(x));
+  t('5 sessions parsed', H.length, 5);
+  t('S1 Sunday push', sets(H[0]),
+    'Bench Press(10,7,7,7) Overhead Press(9,7,5) Pull-Up(10,9,7) Barbell Row(9,8,7) Skull Crusher(8,10,8) Bicep Curl(12,10,8)');
+  t('S2 Thursday pull', sets(H[1]),
+    'Barbell Row(10,9,7,7) Pull-Up(10,8.5,7,7) Incline DB Press(7,6,6) Lateral Raise(18,15,14,14) Rear Delt Fly(10,10,9) Bicep Curl(12,9,9,8) Tricep Extension(9,8,6,6)');
+  t('S3 Saturday upper', sets(H[2]),
+    'Dip(11,11) Pull-Up(11,9) Bench Press(9,7) Bicep Curl(13,11) Lateral Raise(13,11,9) Cable Tricep Ext(7,9) DB Row(13,9)');
+  t('S4 Tuesday upper', sets(H[3]),
+    'Bench Press(9,7,6) Overhead Press(9,7,6) Barbell Row(11,10,7) Pull-Up(12,8,8) Lateral Raise(10,9.5,6.5) Bicep Curl(9,7) Tricep Extension(6.5,7)');
+  t('S5 Thursday pull focus', sets(H[4]),
+    'Barbell Row(9,7.5,5) Pull-Up(12,11,9) Incline DB Press(9,8,5,5) Bicep Curl(9,8,6,7) Rear Delt Fly(11,11,11)');
+  ok('warm-up captured on bench S1', H[0].lifts[0].sets.some(x=>x.warm && x.w===135));
+  ok('half rep 8.5 preserved', H[1].lifts[1].sets.some(x=>x.r===8.5));
+  ok('failure flags on S3 dips', H[2].lifts[0].sets.every(x=>x.f));
+
+  grp('Parser — notations');
+  t('3x5 315', parseNotes('Deadlift 3x5 315')[0].lifts[0].sets.map(s=>s.w+'x'+s.r), ['315x5','315x5','315x5']);
+  t('3x8 at 185 failure', parseNotes('Bench 3x8 at 185 failure on all')[0].lifts[0].sets.map(s=>s.w+'x'+s.r+(s.f?'F':'')), ['185x8F','185x8F','185x8F']);
+  t('60kg → lb', parseNotes('Squats 60kg for 8')[0].lifts[0].sets.map(s=>s.w), [132.5]);
+  t('"all out" counts as failure', parseNotes('Bench 195 for 8, 6 all out')[0].lifts[0].sets.map(s=>s.f), [true,true]);
+  t('"maxed" counts as failure', parseNotes('Dips 12, 10 maxed')[0].lifts[0].sets.map(s=>s.f), [true,true]);
+  const drop = parseNotes('Incline bench press 75s for 9, 8, 5 (failure dropset to 50s) I got 5 with 50s')[0].lifts[0];
+  ok('dropset: last set at the lighter weight', drop.sets.filter(x=>!x.warm).slice(-1)[0].w===50,
+     'got ' + JSON.stringify(drop.sets.map(s=>s.w+'x'+s.r)));
+  ok('dropset: top sets keep top weight', drop.sets.filter(x=>!x.warm)[0].w===75);
+
+  grp('Parser — fails loudly, never silently');
+  const noNum = parseNotes('Bench press went heavy today felt strong');
+  ok('unreadable line flagged noSets', noNum.length===0 || noNum[0].lifts[0].noSets===true);
+  const mixed = parseNotes('Bench press 195 for 9, 8\nRows felt weird skipped the count');
+  ok('good lift still parsed alongside bad', mixed[0].lifts[0].sets.filter(x=>!x.warm).length===2);
+  ok('bad lift flagged, not dropped', !!mixed[0].lifts.find(l=>l.ex==='Barbell Row' && l.noSets));
+
+  grp('Engine — the 75% rule');
+  const mk=(date,arr)=>({date,sets:arr.map(a=>({w:a[0],r:a[1],f:!!a[2],warm:!!a[3]})),note:''});
+  const P={sets:4,lo:6,hi:10};
+  G.getS().log={};
+  G.getS().log['Bench Press']=[mk('2026-07-20',[[195,10,1],[195,9,1],[195,8,1],[195,8,0]])];
+  t('75% exactly + top of range → weight up', (v=>[v.kind,v.w,v.r])(verdict('Bench Press',P)), ['up',205,6]);
+  G.getS().log['Bench Press']=[mk('2026-07-20',[[195,10,1],[195,9,1],[195,8,0],[195,8,0]])];
+  t('50% + top of range → blocked', (v=>[v.kind,v.w])(verdict('Bench Press',P)), ['hard',195]);
+  G.getS().log['Bench Press']=[mk('2026-07-20',[[195,9,0],[195,7,0]])];
+  ok('no marks at all → noMarks, not slacking', verdict('Bench Press',P).noMarks===true);
+  G.getS().log['Bench Press']=[mk('2026-07-20',[[195,9,1],[195,7,0],[195,6,0]])];
+  ok('33% marked → real push-harder', verdict('Bench Press',P).noMarks!==true);
+  G.getS().log['Bench Press']=[mk('2026-07-20',[[135,5,0,1],[195,10,1],[195,9,1],[195,9,1]])];
+  t('warm-up excluded from failure rate', Math.round(failRate(G.getS().log['Bench Press'][0].sets)*100), 100);
+  t('warm-up excluded from volume', volume('Bench Press',[{w:135,r:5,warm:true},{w:195,r:10}]), 1950);
+  t('dumbbell volume counts both hands', volume('Bicep Curl',[{w:35,r:10}]), 700);
+  t('bodyweight volume counts reps', volume('Pull-Up',[{w:0,r:12}]), 12);
+  G.getS().log['Lateral Raise']=[mk('2026-07-20',[[25,20,1],[25,18,1],[25,16,1]])];
+  t('resets to ITS OWN floor (12), not 6', (v=>[v.kind,v.w,v.r])(verdict('Lateral Raise',{sets:3,lo:12,hi:20})), ['up',30,12]);
+
+  grp('Engine — stall detection');
+  G.getS().log['Overhead Press']=['2026-05-01','2026-05-08','2026-05-15','2026-05-22','2026-05-29']
+    .map(d=>mk(d,[[115,9,1],[115,7,1]]));
+  t('5 sessions same weight → stall run 5', stallRun('Overhead Press'), 5);
+  G.getS().log['Overhead Press']=[mk('2026-05-01',[[105,9,1]]),mk('2026-05-08',[[115,9,1]]),mk('2026-05-15',[[115,7,1]])];
+  t('weight moved recently → short run', stallRun('Overhead Press'), 2);
+
+  grp('Sync — merge must never lose data');
+  G.setS({log:{'Dip':[mk('2026-08-01',[[0,12,1]])]},bw:{'2026-08-01':180},protein:{},golf:{},rot:0,lastAdv:'2026-08-01',ts:100});
+  mergeStates({ts:200,rot:2,lastAdv:'2026-08-02',log:{'Bench Press':[mk('2026-07-30',[[200,8,1]])]},bw:{'2026-08-02':179},protein:{},golf:{}});
+  ok('local-only lift survives merge', !!G.getS().log['Dip']);
+  ok('remote lift arrives', !!G.getS().log['Bench Press']);
+  ok('local bodyweight kept', G.getS().bw['2026-08-01']===180);
+  ok('remote bodyweight kept', G.getS().bw['2026-08-02']===179);
+  t('newer remote wins rotation', G.getS().rot, 2);
+  G.setS({log:{},bw:{},protein:{},golf:{},rot:1,lastAdv:'2026-08-03',ts:900});
+  mergeStates({ts:100,rot:2,lastAdv:'2026-08-01',log:{},bw:{},protein:{},golf:{}});
+  t('OLDER remote does NOT steal rotation', G.getS().rot, 1);
+  t('OLDER remote does not steal lastAdv', G.getS().lastAdv, '2026-08-03');
+  // same-date conflict: keep the more complete session
+  G.setS({log:{'Bench Press':[mk('2026-08-01',[[195,9,1],[195,8,1],[195,7,1]])]},bw:{},protein:{},golf:{},rot:0,ts:500});
+  mergeStates({ts:400,log:{'Bench Press':[mk('2026-08-01',[[195,9,0]])]},bw:{},protein:{},golf:{},rot:0});
+  t('same-date conflict keeps richer session', G.getS().log['Bench Press'][0].sets.length, 3);
+
+  grp('Dates — local, never UTC');
+  const n=new Date();
+  const want=`${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+  t('todayStr is local date', G.todayStr(), want);
+
+  const el=document.getElementById('sum');
+  el.className = fail?'bad':'ok';
+  el.textContent = fail ? `${fail} FAILED · ${pass} passed` : `All ${pass} tests passed`;
+  document.getElementById('out').innerHTML = html;
+}
+// the frame may already be loaded by the time this runs — don't rely on onload
+run();
+</script>
+</body>
+</html>

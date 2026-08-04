@@ -74,9 +74,9 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .plan-day{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:13px;}
 .plan-day h4{font-size:.95rem;font-weight:800;margin-bottom:3px;}
 .plan-day .pd-s{font-size:.68rem;color:var(--muted);margin-bottom:13px;}
-.plan-line{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--border);font-size:.81rem;}
-.plan-line b{font-weight:600;}
-.plan-line span{color:var(--muted2);font-weight:700;flex-shrink:0;font-size:.75rem;}
+.plan-line{display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-top:1px solid var(--border);font-size:.81rem;align-items:baseline;}
+.plan-line b{font-weight:600;min-width:0;overflow-wrap:anywhere;}
+.plan-line span{color:var(--muted2);font-weight:700;font-size:.75rem;text-align:right;flex:0 1 auto;min-width:0;}
 .rules{background:rgba(30,200,176,.06);border:1px solid var(--teal-border);border-radius:16px;padding:17px;margin-bottom:14px;}
 .rules h4{font-size:.85rem;font-weight:800;color:var(--teal);margin-bottom:10px;}
 .rules li{font-size:.81rem;color:var(--muted2);line-height:1.65;margin-left:17px;margin-bottom:4px;}
@@ -86,7 +86,8 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
 .imp-sess{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:16px;margin-bottom:12px;}
 .imp-hd{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;}
 .imp-hd b{font-size:.92rem;font-weight:800;}
-.imp-date{background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.8rem;font-family:inherit;padding:7px 10px;-webkit-appearance:none;outline:none;}
+.imp-date{background:var(--card2);border:1px solid var(--border);border-radius:9px;color:var(--text);font-size:.85rem;font-family:inherit;padding:12px 12px;min-height:44px;-webkit-appearance:none;outline:none;}
+.imp-tbl select{min-height:44px;font-size:.85rem!important;}
 .imp-date.miss{border-color:var(--red);}
 .imp-warn{background:rgba(240,180,41,.08);border:1px solid rgba(240,180,41,.28);border-radius:12px;padding:12px 14px;font-size:.76rem;color:var(--yellow);line-height:1.55;margin-bottom:14px;}
 .imp-unk{color:var(--red);font-weight:700;}
@@ -129,6 +130,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
   <div class="field" style="margin-top:20px"><label>Write your workout &mdash; like Notes</label>
     <textarea id="impText" style="min-height:170px" autocorrect="off" autocapitalize="off" spellcheck="false" placeholder="Bench press 135 warmup&#10;195 for 9, 7, 6 failure on all&#10;Pull ups 12, 8, 8&#10;Lateral raises 25s for 10, 9, 7 failure&#10;Bicep curls 40 for 9, 7"></textarea>
   </div>
+  <div id="draftWarn" class="imp-warn" style="display:none;margin-bottom:12px"></div>
   <div class="field" style="margin-bottom:10px"><label>Date</label><input type="date" id="impDate"></div>
   <button class="save-btn" style="margin-top:0;margin-bottom:12px" onclick="runParse()">Save workout</button>
   <div id="impOut"></div>
@@ -186,6 +188,7 @@ html,body{background:var(--bg);color:var(--text);font-family:'Inter',-apple-syst
       <li>Rest 1.5&ndash;3 min between hard sets.</li>
     </ul>
   </div>
+  <div id="prWall"></div>
   <div id="planBody"></div>
   <div class="chart-card" style="margin-top:6px">
     <div class="chart-title">Load your old workouts</div>
@@ -287,7 +290,8 @@ let S = load();
 let uid=null, dbRef=null, fbAuth=null, fbDB=null;
 let curEx=null, curPresc=null, curSets=[], fFlag=false, wFlag=false;
 let prSel='Bench Press', ch1=null, ch2=null, ch3=null;
-let parsed=null;
+let parsed=null, justLogged=null;
+function clearJustLogged(){justLogged=null;renderToday();window.scrollTo(0,0);}
 
 function load(){
   try{
@@ -321,31 +325,59 @@ function migrateV1(){
    of clobbering the newer data. Failed writes show a badge and retry — never
    swallowed silently again. */
 let syncBad=false;
+/* seenTs = the timestamp of the cloud state we have already folded in.
+   It is NOT S.ts — save() stamps S.ts to now, so comparing against S.ts would
+   make every stale device think it was current and blind-overwrite. This is the
+   value that makes the write guard actually work. */
+let seenTs=0;
 function setSyncBadge(on){const b=document.getElementById('syncBadge');if(b)b.style.display=on?'inline':'none';}
+
+/* Read-modify-write inside a transaction. If the cloud holds anything this
+   device never saw, fold it in BEFORE writing, so an offline phone reconnecting
+   days later can never erase what another device logged in the meantime. */
 function save(){
-  S.ts=Date.now();
   try{localStorage.setItem('gym_v2',JSON.stringify(S));}catch(e){}
-  if(!dbRef) return;
-  dbRef.child('v2').set(S).then(()=>{syncBad=false;setSyncBadge(false);})
-    .catch(()=>{syncBad=true;setSyncBadge(true);});
+  if(!dbRef){S.ts=Date.now();return;}
+  dbRef.child('v2').transaction(remote=>{
+    if(remote && (remote.ts||0)>seenTs) mergeStates(remote);
+    S.ts=Date.now();
+    return S;
+  },(err,committed)=>{
+    if(err||!committed){syncBad=true;setSyncBadge(true);return;}
+    seenTs=S.ts; syncBad=false; setSyncBadge(false);
+    try{localStorage.setItem('gym_v2',JSON.stringify(S));}catch(e){}
+  });
 }
 addEventListener('online',()=>{if(syncBad)save();});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&syncBad)save();});
-/* Remote state wins as the base; local-only entries are kept, never discarded. */
+
+/* Union the two states. Newer side wins the single-value fields; for a session
+   logged on the same date on both devices, keep the more complete one rather
+   than silently dropping whichever arrived second. */
 function mergeStates(r){
-  const mine=S; S=Object.assign(JSON.parse(JSON.stringify(BLANK)),r);
+  if(!r) return;
+  const mine=S, rNewer=(r.ts||0)>(mine.ts||0);
+  S=Object.assign(JSON.parse(JSON.stringify(BLANK)),r);
+  const score=s=>{const w=(s.sets||[]).filter(x=>!x.warm);return w.length*10+w.filter(x=>x.f).length;};
   for(const [ex,arr] of Object.entries(mine.log||{})){
     if(!S.log[ex]){S.log[ex]=arr;continue;}
-    const have=new Set(S.log[ex].map(s=>s.date));
-    arr.forEach(s=>{if(!have.has(s.date))S.log[ex].push(s);});
-    S.log[ex].sort((a,b)=>a.date.localeCompare(b.date));
+    const byDate=new Map(S.log[ex].map(s=>[s.date,s]));
+    arr.forEach(s=>{
+      const other=byDate.get(s.date);
+      if(!other || score(s)>score(other)) byDate.set(s.date,s);
+    });
+    S.log[ex]=[...byDate.values()].sort((a,b)=>a.date.localeCompare(b.date));
   }
-  for(const k of ['bw','protein','golf']) S[k]=Object.assign({},mine[k]||{},S[k]||{});
+  // daily numbers: the newer side wins a same-day collision
+  for(const k of ['bw','protein','golf'])
+    S[k] = rNewer ? Object.assign({},mine[k]||{},r[k]||{}) : Object.assign({},r[k]||{},mine[k]||{});
+  // rotation position belongs to whichever device acted most recently
+  if(!rNewer){ S.rot=mine.rot; S.lastAdv=mine.lastAdv; }
   S.ts=Math.max(mine.ts||0,r.ts||0);
 }
 function mergeRemote(r){
   if(!r) return;
-  mergeStates(r);
+  mergeStates(r); seenTs=r.ts||seenTs;
   try{localStorage.setItem('gym_v2',JSON.stringify(S));}catch(e){}
   boot(); toast('Updated from your other device');
 }
@@ -353,7 +385,7 @@ function watchCloud(){
   if(!dbRef) return;
   dbRef.child('v2/ts').on('value',snap=>{
     const cts=snap.val();
-    if(cts && cts>(S.ts||0)) dbRef.child('v2').once('value').then(s=>mergeRemote(s.val()));
+    if(cts && cts>seenTs && cts>(S.ts||0)) dbRef.child('v2').once('value').then(s=>mergeRemote(s.val()));
   });
 }
 
@@ -377,7 +409,7 @@ fbAuth.onAuthStateChanged(u=>{
   uid=u.uid; dbRef=fbDB.ref('users/'+uid);
   dbRef.child('v2').once('value').then(snap=>{
     const d=snap.val();
-    if(d){ mergeStates(d); save(); }   // merge, don't clobber — keeps anything logged before sign-in
+    if(d){ mergeStates(d); seenTs=d.ts||0; save(); }   // merge, don't clobber — keeps anything logged before sign-in
     else{ // first run on v2: pull the old app's data down, then keep it side by side
       return dbRef.once('value').then(all=>{
         const o=all.val()||{};
@@ -472,6 +504,32 @@ function verdict(ex, p){
 }
 const VK={start:{l:'Start here',c:'start'},hard:{l:'Push harder',c:'hard'},rep:{l:'Add a rep',c:'rep'},up:{l:'Add weight',c:'up'}};
 
+/* How many sessions in a row at the same top weight. A single verdict can't see
+   a stall — his Overhead Press sat at 115 for a year and nothing ever said so. */
+function stallRun(ex){
+  const a=sorted(S.log[ex]||[]).filter(s=>work(s).length);
+  if(a.length<3) return 0;
+  const top=s=>Math.max(...work(s).map(x=>x.w));
+  const w=top(a[a.length-1]); let n=0;
+  for(let i=a.length-1;i>=0;i--){ if(top(a[i])===w) n++; else break; }
+  return n;
+}
+/* Every session where the top weight beat everything before it. */
+function prList(){
+  const out=[];
+  for(const ex of EX_NAMES){
+    const a=sorted(S.log[ex]||[]).filter(s=>work(s).length);
+    let best=-1;
+    a.forEach(s=>{
+      const w=Math.max(...work(s).map(x=>x.w));
+      const reps=Math.max(...work(s).map(x=>x.r));
+      if(EX[ex].unit==='bw'&&w===0){ if(reps>best){out.push({ex,date:s.date,txt:`${nRep(reps)} reps`});best=reps;} }
+      else if(w>best){ if(best>=0) out.push({ex,date:s.date,txt:fmtW(ex,w)}); best=w; }
+    });
+  }
+  return out.sort((a,b)=>b.date.localeCompare(a.date));
+}
+
 /* ---------- boot / nav ---------- */
 function boot(){
   renderToday(); renderPlan();
@@ -497,8 +555,22 @@ function renderToday(){
 /* Draft autosave — iOS reloads backgrounded PWAs; half a typed workout must
    survive a screen lock. Restored on load, cleared only on successful save. */
 const draftBox=document.getElementById('impText');
-draftBox.addEventListener('input',()=>{try{localStorage.setItem('gym_draft',draftBox.value);}catch(e){}});
-try{const dr=localStorage.getItem('gym_draft');if(dr&&!draftBox.value)draftBox.value=dr;}catch(e){}
+draftBox.addEventListener('input',()=>{try{
+  localStorage.setItem('gym_draft',draftBox.value);
+  localStorage.setItem('gym_draft_date',todayStr());
+}catch(e){}});
+try{
+  const dr=localStorage.getItem('gym_draft'), dd=localStorage.getItem('gym_draft_date');
+  if(dr&&!draftBox.value){
+    draftBox.value=dr;
+    // a draft from an earlier day must say so — otherwise yesterday's half
+    // workout silently commits under today's date
+    if(dd&&dd!==todayStr()) setTimeout(()=>{
+      const w=document.getElementById('draftWarn');
+      if(w){w.style.display='block';w.textContent=`⚠ This text was left over from ${fmtDate(dd)} — check the date before saving, or clear it.`;}
+    },0);
+  }
+}catch(e){}
 function renderStrip(){
   document.getElementById('rotStrip').innerHTML=rot().map((d,i)=>
     `<button class="rot-step ${i===S.rot%rot().length?'on':''}" onclick="jump(${i})">${d}</button>`).join('');
@@ -530,7 +602,19 @@ function saveProtein(){
 }
 
 function renderExCards(){
-  const d=curDay(), box=document.getElementById('exCards');
+  const box=document.getElementById('exCards');
+  // Just saved? Show what was logged FIRST. Silently flipping the list to the
+  // next day's unfamiliar lifts reads as "my save failed".
+  if(justLogged && justLogged.date===todayStr()){
+    const lines=justLogged.lifts.map(x=>`<div class="plan-line" style="color:var(--teal)"><b style="color:var(--teal)">&#10003; ${x.ex}</b><span style="color:var(--teal)">${x.txt}</span></div>`).join('');
+    box.innerHTML=`<div class="plan-day" style="border-color:var(--teal-border);background:var(--teal-dim)">
+      <h4 style="color:var(--teal)">&#10003; ${justLogged.day} logged</h4>
+      <div class="pd-s">${fmtDate(justLogged.date)}</div>${lines}
+      <button class="nb pri" style="width:100%;margin-top:14px" onclick="clearJustLogged()">Next up: ${curDay()} &rarr;</button>
+    </div>`;
+    return;
+  }
+  const d=curDay();
   // One line per lift: target on the right, "last time" underneath — the two
   // things worth knowing while standing at the bar. Tap nothing.
   const rows = DAYS[d].items.map(p=>{
@@ -544,8 +628,10 @@ function renderExCards(){
     const tgt = v.w===null ? `pick a weight × ${nRep(v.r)}` : `${fmtW(ex,v.w)} × ${nRep(v.r)}`;
     const mark = v.kind==='up' ? ' &#128293;' : v.noMarks ? ' &#9997;' : v.kind==='hard' ? ' &#9888;' : '';
     const last = lastOf(ex);
+    const run = stallRun(ex);
+    const stall = run>=4 ? `<br><small style="color:var(--yellow);font-weight:600;font-size:.66rem">stuck at this weight ${run} sessions — try a lighter week, then come back</small>` : '';
     const lastLine = last ? `<br><small style="color:var(--muted);font-weight:400;font-size:.66rem">last: ${fmtSets(ex,last.sets)} · ${fmtDate(last.date)}</small>` : '';
-    return `<div class="plan-line"><b>${ex}${mark}</b><span style="text-align:right">${p.sets} sets · ${tgt}${lastLine}</span></div>`;
+    return `<div class="plan-line"><b>${ex}${mark}</b><span>${p.sets} sets · ${tgt}${lastLine}${stall}</span></div>`;
   }).join('');
   box.innerHTML=`<div class="plan-day"><h4>${d} <span style="color:var(--muted);font-weight:400;font-size:.72rem">· ${DAYS[d].sub}</span></h4>${rows}
     <div class="pd-s" style="margin:12px 0 0">&#128293; weight goes up &nbsp;·&nbsp; &#9888; under 75% to failure &nbsp;·&nbsp; &#9997; no failure marks last time</div></div>`;
@@ -742,6 +828,13 @@ function loadNotesHistory(){
 
 /* ---------- PLAN ---------- */
 function renderPlan(){
+  // Trophy case — every time a weight went up, newest first.
+  const prs=prList().slice(0,12);
+  document.getElementById('prWall').innerHTML = prs.length
+    ? `<div class="plan-day"><h4>&#128293; Every time the weight went up</h4>
+       <div class="pd-s">${prList().length} total</div>
+       ${prs.map(p=>`<div class="plan-line"><b>${p.ex}</b><span>${p.txt} · ${fmtDate(p.date)}</span></div>`).join('')}</div>`
+    : '';
   document.getElementById('planBody').innerHTML=Object.entries(DAYS).map(([n,d])=>
     `<div class="plan-day"><h4>${n}</h4><div class="pd-s">${d.sub}</div>
      ${d.items.map(p=>`<div class="plan-line"><b>${p.ex}${p.alt?` <span style="color:var(--muted);font-weight:400">or ${p.alt}</span>`:''}</b><span>${p.sets} × ${p.lo}–${p.hi}</span></div>`).join('')}
@@ -812,6 +905,17 @@ function findWeight(line){
   return null;
 }
 
+/* How many rep-numbers appear before a given position in the line — tells us
+   which set index the dropset starts at. */
+function repsBefore(repPart, line, idx){
+  const upto=line.slice(0,idx);
+  const start=line.length-repPart.length;
+  if(idx<=start) return 0;
+  const seg=upto.slice(start).replace(/\([^)]*\)/g,' ').replace(/\d+(?:\.\d+)?\s*(?:s\b|lbs?\b)/ig,' ');
+  const m=seg.match(/\d+(?:\.\d+)?/g);
+  return m?m.filter(x=>+x>0&&+x<=60).length:0;
+}
+
 function parseNotes(text){
   const out=[]; let sess=null, curLine=null;
   const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
@@ -859,13 +963,14 @@ function parseNotes(text){
     if(!ex && curLine && !hasWords) ex=curLine.ex;
 
     const repPart = wInfo ? workLine.slice(wInfo.end) : (firstDigit>-1 ? workLine.slice(firstDigit) : '');
-    const globalFail=/failure on (both|all)|1 rir on all|to failure|failure on/.test(low);
+    // "all out", "maxed", "amrap", "till failure" are the same statement as "failure"
+    const globalFail=/failure on (both|all)|1 rir on all|to failure|failure on|all ?out|maxed|amrap|to fail/.test(low);
     const reps=[];
     for(const c of repPart.split(',')){
       // Failure words often live inside the brackets — read them there,
       // but strip the brackets before counting reps so "1 RIR" isn't a rep.
       const cl=c.toLowerCase();
-      const chunkFail=globalFail||/fail/.test(cl)||/\brir\b/.test(cl);
+      const chunkFail=globalFail||/fail/.test(cl)||/\brir\b/.test(cl)||/all ?out|maxed/.test(cl);
       let bare=c.replace(/\([^)]*\)/g,' ').replace(/\d+\s*rir/ig,' ');
       // his "50s" / "50 lb" notation always means a weight, never a rep
       bare=bare.replace(/\d+(?:\.\d+)?\s*(?:s\b|lbs?\b)/ig,' ');
@@ -891,8 +996,22 @@ function parseNotes(text){
     curLine.raw.push(line);
     if(warmW!==null) curLine.sets.push({w:warmW,r:0,f:false,warm:true});
     if(bareWarm && !reps.length && wInfo) curLine.sets.push({w:wInfo.w,r:0,f:false,warm:true});
+    // A dropset names a SECOND weight mid-line ("...dropset to 50s I got 5 with
+    // 50s"). Sets written after that marker belong to the lighter weight, not
+    // the top weight — recording them at the top weight inflates volume and can
+    // fake a PR.
     const w = wInfo ? wInfo.w : 0;
-    reps.forEach(rp=>curLine.sets.push({w,r:rp.r,f:rp.f,warm:bareWarm}));
+    let dropW=null, dropAt=-1;
+    const dm=workLine.match(/drop\s*-?\s*set|dropped\s+to|drop\s+to/i);
+    if(dm){
+      const after=workLine.slice(dm.index);
+      const dw=findWeight(after);
+      if(dw && dw.w!==w){ dropW=dw.w; dropAt=repsBefore(repPart, workLine, dm.index); }
+    }
+    reps.forEach((rp,i)=>curLine.sets.push({
+      w: (dropW!==null && dropAt>=0 && i>=dropAt) ? dropW : w,
+      r:rp.r, f:rp.f, warm:bareWarm
+    }));
   }
   // A recognized exercise whose sets couldn't be read must fail LOUDLY on the
   // check screen — silently dropping it is how workouts go missing.
@@ -955,16 +1074,21 @@ function setImpEx(si,li,v){if(v)parsed[si].lifts[li].ex=v;renderImport();}
 function commitImport(){
   const missing=parsed.filter(s=>!s.date).length;
   if(missing){toast(`${missing} session${missing===1?'':'s'} still need a date`);return;}
-  let n=0,skipped=0;const lines=[],prs=[];
+  let n=0,skipped=0;const lines=[],prs=[],logged=[];
   parsed.forEach(s=>{
     s.lifts.forEach(l=>{
       if(l.ex.startsWith('?')||!EX[l.ex]||l.noSets){skipped++;return;}
       if(!S.log[l.ex]) S.log[l.ex]=[];
       // catch the PR before this save changes history
       const prev=[...S.log[l.ex]].filter(x=>x.date<s.date).pop();
-      const prevW=prev?Math.max(...work(prev).map(x=>x.w)):0;
+      const prevW=prev?Math.max(...work(prev).map(x=>x.w),0):-1;
       const newW=Math.max(...l.sets.filter(x=>!x.warm).map(x=>x.w),0);
-      if(prev && newW>prevW && prevW>0) prs.push(`${l.ex} ${prevW}→${newW}`);
+      // bodyweight lifts sit at w:0 — a PR there is more reps, not more weight
+      if(prev && EX[l.ex].unit==='bw' && newW===0 && prevW===0){
+        const pr0=Math.max(...work(prev).map(x=>x.r),0), nr=Math.max(...l.sets.filter(x=>!x.warm).map(x=>x.r),0);
+        if(nr>pr0) prs.push(`${l.ex} ${nRep(pr0)}→${nRep(nr)} reps`);
+      } else if(prev && newW>prevW && prevW>=0) prs.push(`${l.ex} ${prevW}→${newW}`);
+      logged.push({ex:l.ex, txt:fmtSets(l.ex,l.sets)});
       S.log[l.ex]=S.log[l.ex].filter(x=>x.date!==s.date);
       S.log[l.ex].push({date:s.date,sets:l.sets.map(x=>({w:x.w,r:x.r,f:!!x.f,warm:!!x.warm})),note:''});
       S.log[l.ex].sort((a,b)=>a.date.localeCompare(b.date));
@@ -975,16 +1099,20 @@ function commitImport(){
   });
   // logging today's workout moves the rotation forward — once per date, not on re-saves
   let advanced='';
-  if(parsed.length===1 && parsed[0].date===todayStr() && S.lastAdv!==todayStr() && n>0){
-    S.rot=(S.rot+1)%rot().length; S.lastAdv=todayStr();
-    advanced=' · Next: '+curDay();
+  if(parsed.length===1 && parsed[0].date===todayStr() && n>0){
+    justLogged={day:curDay(), date:todayStr(), lifts:logged};
+    if(S.lastAdv!==todayStr()){
+      S.rot=(S.rot+1)%rot().length; S.lastAdv=todayStr();
+      advanced=' · Next: '+curDay();
+    }
   }
   save();
   document.getElementById('impOut').innerHTML=
     `<div class="plan-day"><h4 style="color:var(--teal)">&#10003; Saved ${n} lift${n===1?'':'s'}${skipped?` · ${skipped} skipped`:''}</h4>
      <div class="pd-s">Read wrong? Write it again and save — same date overwrites.</div>${lines.join('')}</div>`;
   document.getElementById('impText').value='';
-  try{localStorage.removeItem('gym_draft');}catch(e){}
+  try{localStorage.removeItem('gym_draft');localStorage.removeItem('gym_draft_date');}catch(e){}
+  const dw=document.getElementById('draftWarn'); if(dw) dw.style.display='none';
   parsed=null;
   toast(prs.length ? `\u{1F525} Weight up: ${prs.join(', ')}${advanced}` : 'Saved'+advanced);
   renderToday();
